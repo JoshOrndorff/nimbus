@@ -56,6 +56,7 @@ pub mod pallet {
 
 	/// The Author Filter pallet
 	#[pallet::pallet]
+	#[pallet::without_storage_info]
 	pub struct Pallet<T>(PhantomData<T>);
 
 	/// Configuration trait of this pallet.
@@ -136,6 +137,12 @@ pub mod pallet {
 
 			eligible.contains(author)
 		}
+		#[cfg(feature = "runtime-benchmarks")]
+		fn get_authors(slot: &u32) -> Vec<T::AccountId> {
+			// Compute pseudo-random subset of potential authors
+			let (eligible, _) = compute_pseudo_random_subset::<T>(T::PotentialAuthors::get(), slot);
+			eligible
+		}
 	}
 
 	#[pallet::call]
@@ -166,7 +173,7 @@ pub mod pallet {
 
 	#[pallet::storage]
 	#[pallet::getter(fn eligible_ratio)]
-	#[deprecated]
+	#[deprecated(note = "use `pallet::EligibleCount` instead")]
 	pub type EligibleRatio<T: Config> = StorageValue<_, Percent, ValueQuery, Half<T>>;
 
 	// Default value for the `EligibleRatio` is one half.

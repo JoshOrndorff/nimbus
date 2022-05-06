@@ -34,9 +34,15 @@ pub use exec::BlockExecutor;
 
 pub use pallet::*;
 
+#[cfg(any(test, feature = "runtime-benchmarks"))]
+mod benchmarks;
+
+pub mod weights;
+
 #[frame_support::pallet]
 pub mod pallet {
 	use super::*;
+	use crate::weights::WeightInfo;
 	use frame_support::pallet_prelude::*;
 	use frame_system::pallet_prelude::*;
 
@@ -63,6 +69,8 @@ pub mod pallet {
 
 		/// Some way of determining the current slot for purposes of verifying the author's eligibility
 		type SlotBeacon: SlotBeacon;
+
+		type WeightInfo: WeightInfo;
 	}
 
 	impl<T> sp_runtime::BoundToRuntimeAppPublic for Pallet<T> {
@@ -82,6 +90,11 @@ pub mod pallet {
 	/// Author of current block.
 	#[pallet::storage]
 	pub type Author<T: Config> = StorageValue<_, T::AccountId, OptionQuery>;
+
+	/// The highest slot that has been seen in the history of this chain.
+	/// This is a strictly-increasing value.
+	#[pallet::storage]
+	pub type HighestSlotSeen<T: Config> = StorageValue<_, u32, ValueQuery>;
 
 	#[pallet::hooks]
 	impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
@@ -112,17 +125,27 @@ pub mod pallet {
 		/// but before transactions are executed.
 		// This should go into on_post_inherents when it is ready https://github.com/paritytech/substrate/pull/10128
 		// TODO better weight. For now we just set a somewhat conservative fudge factor
-		#[pallet::weight((10 * T::DbWeight::get().write, DispatchClass::Mandatory))]
+		#[pallet::weight(T::WeightInfo::kick_off_authorship_validation())]
 		pub fn kick_off_authorship_validation(origin: OriginFor<T>) -> DispatchResultWithPostInfo {
 			ensure_none(origin)?;
 
+			// First check that the slot number is valid (greater than the previous highest)
+			let slot = T::SlotBeacon::slot();
+			assert!(
+				slot > HighestSlotSeen::<T>::get(),
+				"Block invalid; Supplied slot number is not high enough"
+			);
+
+			// Now check that the author is valid in this slot
 			let author = <Author<T>>::get()
 				.expect("Block invalid, no authorship information supplied in preruntime digest.");
-
 			assert!(
-				T::CanAuthor::can_author(&author, &T::SlotBeacon::slot()),
+				T::CanAuthor::can_author(&author, &slot),
 				"Block invalid, supplied author is not eligible."
 			);
+
+			// Once that is validated, update the stored slot number
+			HighestSlotSeen::<T>::put(slot);
 
 			Ok(Pays::No.into())
 		}
@@ -189,6 +212,13 @@ pub mod pallet {
 			};
 
 			T::CanAuthor::can_author(&account, slot)
+		}
+		#[cfg(feature = "runtime-benchmarks")]
+		fn set_eligible_author(slot: &u32) {
+			let eligible_authors = T::CanAuthor::get_authors(slot);
+			if let Some(author) = eligible_authors.first() {
+				Author::<T>::put(author)
+			}
 		}
 	}
 }
