@@ -191,7 +191,6 @@ pub fn import_queue<Client, Block: BlockT, I, CIDP>(
 	create_inherent_data_providers: CIDP,
 	spawner: &impl sp_core::traits::SpawnEssentialNamed,
 	registry: Option<&substrate_prometheus_endpoint::Registry>,
-	parachain: bool,
 ) -> ClientResult<BasicQueue<Block, I::Transaction>>
 where
 	I: BlockImport<Block, Error = ConsensusError> + Send + Sync + 'static,
@@ -208,7 +207,7 @@ where
 
 	Ok(BasicQueue::new(
 		verifier,
-		block_import,
+		Box::new(block_import),
 		None,
 		spawner,
 		registry,

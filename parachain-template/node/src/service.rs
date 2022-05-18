@@ -153,7 +153,6 @@ where
 		},
 		&task_manager.spawn_essential_handle(),
 		config.prometheus_registry().clone(),
-		parachain,
 	)?;
 
 	let params = PartialComponents {
@@ -412,6 +411,8 @@ pub async fn start_parachain_node(
 				prometheus_registry,
 				telemetry.clone(),
 			);
+
+			//TODO use the regular parachain block import here.
 
 			Ok(NimbusConsensus::build(BuildNimbusConsensusParams {
 				para_id: id,
